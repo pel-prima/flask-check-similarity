@@ -17,10 +17,7 @@ logging.basicConfig(
 )
 
 # Ambil token API dari variabel lingkungan
-API_TOKEN = os.getenv("API_TOKEN")
-
-if not API_TOKEN:
-    raise ValueError("API_TOKEN tidak ditemukan. Pastikan sudah diatur dalam variabel lingkungan.")
+API_TOKEN = "GNyft8OsvZAlizusJeSG1I8RxyErxygHBTzKGW8dllZIADvacj"
 
 # Kelas Token Similarity
 class TokenSimilarity:
