@@ -1,11 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 import re
 import string
 import torch
 from torch import clamp
 from transformers import AutoTokenizer, AutoModel
 from sklearn.metrics.pairwise import cosine_similarity
-from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # Tentukan token yang sah
@@ -15,18 +14,13 @@ API_TOKEN = "GNyft8OsvZAlizusJeSG1I8RxyErxygHBTzKGW8dllZIADvacj"
 class TokenSimilarity:
 
     def __init__(self, model_path=r"C:\Users\Hermans\.cache\huggingface\hub\models--indobenchmark--indobert-base-p1"):
-    # def __init__(self, model_path="indobenchmark/indobert-base-p2"):
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.model = AutoModel.from_pretrained(model_path)
         self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     def __cleaning(self, text):
-        # Remove punctuations
         text = text.translate(str.maketrans('', '', string.punctuation))
-
-        # Remove multiple spaces
         text = re.sub(r'\s+', ' ', text).strip()
-
         return text
 
     def __process(self, first_token, second_token, max_length, truncation, padding):
@@ -35,13 +29,10 @@ class TokenSimilarity:
                                 truncation=truncation,
                                 padding=padding,
                                 return_tensors='pt')
-
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-
         attention = inputs["attention_mask"]
         outputs = self.model(**inputs)
 
-        # Get embeddings using mean pooling
         embeddings = outputs.last_hidden_state
         attention = attention.unsqueeze(-1).to(torch.float32)
         masked_embeddings = embeddings * attention
@@ -56,18 +47,25 @@ class TokenSimilarity:
         second_token = self.__cleaning(second_token)
 
         embeddings = self.__process(first_token, second_token, max_length, truncation, padding)
-
-        # Calculate cosine similarity
         similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
 
         return similarity
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Mengaktifkan CORS
+CORS(app)
 
-# Tambahkan inisialisasi setelah mendefinisikan kelas TokenSimilarity
 ts = TokenSimilarity()
+
+# Middleware untuk memeriksa API token
+@app.before_request
+def check_api_token():
+    if request.method != "OPTIONS":  # Abaikan preflight request
+        token = request.headers.get('Authorization')
+        if token != f"Bearer {API_TOKEN}":
+            # Jika token tidak valid atau tidak ada, kembalikan halaman kosong
+            return make_response("<h1>Halaman untuk mendukung website pelajarprima.com</h1>"
+                                 "<p>Silahkan menuju website kami <a href='https://pelajarprima.com'>pelajarprima.com</a></p>", 403)
 
 @app.route('/check_similarity', methods=['POST'])
 def predict_similarity():
@@ -79,16 +77,16 @@ def predict_similarity():
         if not student_answer or not key_answer:
             return jsonify({"error": "jawaban dan kunci jawaban harus dimasukan."}), 400
         
-        student_answer = data['studentAnswer']
-        key_answer = data['keyAnswer']
-
         similarity_score = ts.predict(student_answer, key_answer)
-
         return jsonify({"similarityScore": round(float(similarity_score), 4)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/check_similarity', methods=['GET'])
+def redirect_to_home():
+    # Jika ada permintaan GET ke /check_similarity, kembalikan halaman kosong
+    return make_response("<h1>Halaman untuk mendukung website pelajarprima.com</h1>"
+                         "<p>Silahkan menuju website kami <a href='https://pelajarprima.com'>pelajarprima.com</a></p>", 200)
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000, debug=False)
-
